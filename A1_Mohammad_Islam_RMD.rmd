@@ -1,0 +1,201 @@
+---
+title: 'MA5832: Data Mining & Machine Learning'
+author: "Mohammad Kaosarul Islam"
+date: "`r Sys.Date()`"
+output:
+  word_document: default
+  html_document:
+    df_print: paged
+  pdf_document:
+    latex_engine: xelatex
+    keep_tex: yes
+    citation_package: natbib
+subtitle: MA5832-Assessment 1
+institute: JCU Masters of Data Science
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+### Question 1: Probability distribution
+#### Solving the problem with pbinorm() function 
+#### The solution have 5 arguments
+#### 1.  x = number of expected sucess
+#### 2. size = number of trials
+#### 3. The probalility of sucesss
+#### 4. lower.tail = specifying which tail the test will be running size = 25 and prob = 0.4
+
+### Question 1(a)
+#### To determine the probability that at most are full (symbolised as x <=10), set the lower tail function to TRUE since the direction is less than equal (<=)
+```{r}
+pbinom(10, size =25, prob =0.4, lower.tail =TRUE, log.p= FALSE)
+```
+### Question 1(b)
+#### No more than 15 can be infered as the same as almost, which can be modeled as x <= 15. So,set the lower tail function to TRUE since the direction is less than equal (<=)
+```{r}
+pbinom(15, size=25, prob=0.4, lower.tail = TRUE, log.p= FALSE)
+```
+### Question 1(c)
+#### R-programme rounds down a continuous value.  The one-quarter of the sample size of 25 is 6.25. Therefore, running x = 6 and 6.25 will produce the almost or same result. So, less than one quarter means P(X≤6.25) Probability of at most 6 successes:
+```{r}
+pbinom(6.25,size=25,prob=0.4,lower.tail = TRUE, log.p= FALSE)
+pbinom(6,size=25,prob=0.4,lower.tail = TRUE, log.p= FALSE)
+```
+
+## QUESTION 3(a) use equations (4) and (5) to estimate β and its standard error in R.
+### Solution 3(a) 
+```{r}
+library(dplyr) # Attaching package: 'dplyr' for manipulating datasets in R
+library(ggplot2) # for visualisations
+library(tidyr) # for mathematics manipulation
+#install.packages('datarium') - install datarium package if not available in R (if already installed then not required)
+library(datarium) # load data
+data(marketing) #consider the marketing dataset from datarium data
+str(marketing) #check data structure
+dim(marketing) #check the dimension of the dataset
+head(marketing) #display first 6 rows of data
+glimpse(marketing) #check data types
+is.null(marketing) # check null values if present in dataset (Found false for marketing dataset)
+```
+
+```{r}
+X <- as.matrix(marketing[, 1:3]) # select target variables youtube, facebook and newspaper in X matrix by excluding response variable sales 
+X <- cbind(X, rep(1, nrow(X))) # a column of '1's to the X has been added to estimate β0 or the ’Y’ intercept
+Y <- as.matrix(marketing$sales) #  Y matrix of response variable "sales"
+```
+#### From equation (4), the coefficients can be estimated with the following function.
+```{r}
+# applied equation 4
+co_eff <- function(X, Y){
+coeff_m <- as.matrix(solve((t(X) %*% X)) %*% t(X) %*% Y) # Used the solve() function to calculate the inverse.
+return(coeff_m) #return of value  
+}
+est_coeffs <- co_eff(X, Y) #estimation of co-efficients  
+est_coeffs # result of estimated co-efficients 
+```
+Now calculating the standard deviation/error
+```{r}
+sd_dev <- function(X, Y, coeff_m){
+  # The standard deviation of beta
+  # s^2 in equation 5 stepped out for simplicity
+  n <- nrow(X)
+  cols <- ncol(X)
+  Yhat <- X %*% coeff_m
+  error <- Y - Yhat
+  sq_errors <- error ^ 2
+  deg_freedom <- 1/(n-cols) 
+  var <- deg_freedom * sum(sq_errors)
+  sd <- diag(sqrt(var * solve(t(X) %*% X))) # equation (5)
+}
+sd_dev <- sd_dev(X, Y, est_coeffs)
+print(sd_dev)
+```
+
+### Solution 3(b) 
+#### In order to compare the results obtained in Question 3(a) with those obtained from the function lm(), first, need to calculate the data in lm() function.
+```{r}
+# get coefficients for dataset using built in lm function 
+lm_model <- lm(sales ~ ., data = marketing) # calculate the linear model
+lm_coefs <- lm_model$coefficients # to get the coefficients
+std_lm_coefs <- coef(summary(lm_model))[, "Std. Error"] # To obtain standard errors
+lm_model
+lm_coefs
+std_lm_coefs
+```
+#### Comparising the result of the coefficients 
+####                                Intercept:    youtube:     facebook:     newspaper:
+#### lm() function coefficients:   3.526667243   0.045764645   0.188530017  -0.001037493 
+#### estimated coefficients:       3.526667243   0.045764645  0.188530017  -0.001037493
+
+#### The value appears to be the same.
+#### Comparison of standard deviations and standard errors
+####                                  Intercept:   youtube      facebook:    newspaper:
+#### lm() function s.e coefficients:  0.374289884  0.001394897  0.008611234  0.005871010 
+#### s.d estimated coefficients:      0.374289884  0.001394897  0.008611234  0.005871010  
+#### Applying Identical function to examing the equality of the values.
+```{r}
+equality_coefs <- identical(est_coeffs, lm_coefs) # check of equality
+std_ord <- c(sd_dev[4], sd_dev[1:3]) # put standard errors in the same order 
+equality_coefs
+quality_errors <- identical(std_lm_coefs, std_ord)  # check of equality
+quality_errors
+```
+#### Both results for equality return FALSE. This shows that there are marginal differences in the values which are not been shown due to R's programming rounding the figures.However, both methods are similar in practice for most applications.
+
+
+### Solution 4(b) 
+####  R code to implement the Classical Gradient Descent procedure provided in Question 4(a).
+```{r}
+# Goal is to estimate m in a simple linear regression y = mX+c using Gradient Descent
+gradDesc<-function(df,
+                x, # vector of x values
+                y, # vector of y values
+                m0, # starting point for m
+                alpha=0.005, # learning rate (equivalent to alpha in gradient descent)
+                max_iter=100000, # repeat process 100000 times (higher iteration => global optimum)
+                threshold=0.00001){# if the gradient is smaller than the threshold (changes), stop
+                               # go back and re-run the function before continuing to next iteration
+
+  #Store the values of m across number of iterations
+  start_time <- Sys.time()
+  set.seed(1)
+  n <- nrow(df)
+  x <- cbind(1, scale(df[,x])) # store variables in x
+  y <- as.matrix(df[,y]) # store response variables in y
+  
+  # Step 1 in Gradient Descent method - initialize random weights
+  m <- runif(ncol(x),0,1)
+  yhat <- x%*%m # + c #calculate yhats for all x and m
+  mse <- (1/n) * sum((y - yhat) ** 2)
+  converged <- F
+  iteration <- 0
+  
+  # dataframe for keeping records
+  record <- data.frame(
+    iteration = iteration,
+    mse = mse
+  )
+  for (i in 1:length(m)) {
+    record[[paste0("m_",i-1)]] <- m[i]
+  }
+  
+  for (i in 1:length(m)) {
+    record[[paste0("dm_",i-1)]] <- m[i]
+  }
+  
+  # update weight using GD algorithm
+  while(converged == F){
+    iteration <- iteration + 1
+  #Step 2: calculate the gradient of the loss function using the derivative of the 
+ 
+    dm <- (1/n) * t(x)%*%(yhat - y) # matrix to store gradients dm
+  # Step 3: update m according from learning rate x slope
+    m <- m - alpha * dm #the loss function with respect to m
+    yhat <- x%*%m
+    mse <- mean((y - yhat)^2)
+    record <- rbind(record, c(iteration, mse, m, dm))
+    # if iteration hits max_iter or gradient converges to zero, program ends
+    if(iteration == max_iter || all(abs(dm) <= threshold)){
+      converged <- T
+      cat(
+        "Time elapsed: ", 
+        Sys.time() - start_time, 
+        "\nIteration Completed: ", 
+        iteration,
+        "\nFinal MSE:",
+        mse,
+        "\nFinal coefficients: ",
+        m,
+        "\n"
+      )
+      return(record)
+    }
+  }
+}
+
+data(marketing, package = "datarium") # marketing data from datarium
+train_history <- gradDesc(marketing, x = 1:3, y = 4, alpha = 0.005, max_iter = 100000) # gd output 
+
+
+```
+
